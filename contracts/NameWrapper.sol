@@ -324,8 +324,15 @@ contract NameWrapper is
         uint96 _fuses,
         address resolver
     ) public override {
+ resolver
+        bytes32 labelhash = keccak256(bytes(label));
+        bytes32 node = _makeNode(ETH_NODE, labelhash);
+        uint256 tokenId = uint256(labelhash);
+        address owner = registrar.ownerOf(tokenId);
+=======
         uint256 tokenId = uint256(keccak256(bytes(label)));
         address registrant = registrar.ownerOf(tokenId);
+ master
 
         require(
             registrant == msg.sender ||
@@ -333,6 +340,11 @@ contract NameWrapper is
                 registrar.isApprovedForAll(registrant, msg.sender),
             "NameWrapper: Sender is not owner or authorised by the owner or authorised on the .eth registrar"
         );
+
+        // transfer the ens record back to the new owner (this contract)
+        registrar.reclaim(uint256(labelhash), address(this));
+
+        _wrapETH2LD(label, wrappedOwner, _fuses, resolver);
 
         // transfer the token from the user to this contract
         registrar.transferFrom(registrant, address(this), tokenId);
@@ -365,7 +377,12 @@ contract NameWrapper is
         address resolver,
         uint96 _fuses
     ) external override onlyController returns (uint256 expires) {
+ resolver
+        bytes32 labelhash = keccak256(bytes(label));
+        uint256 tokenId = uint256(labelhash);
+=======
         uint256 tokenId = uint256(keccak256(bytes(label)));
+ master
 
         expires = registrar.register(tokenId, address(this), duration);
         _wrapETH2LD(label, wrappedOwner, _fuses, resolver);
@@ -378,13 +395,21 @@ contract NameWrapper is
      * @param duration The number of seconds to renew the name for.
      * @return expires The expiry date of the name, in seconds since the Unix epoch.
      */
+ resolver
+    function renew(uint256 labelHash, uint256 duration)
+=======
     function renew(uint256 tokenId, uint256 duration)
+ master
         external
         override
         onlyController
         returns (uint256 expires)
     {
+ resolver
+        return registrar.renew(labelHash, duration);
+=======
         return registrar.renew(tokenId, duration);
+ master
     }
 
     /**
@@ -423,8 +448,14 @@ contract NameWrapper is
         }
 
         ens.setOwner(node, address(this));
+ resolver
+        if (resolver != address(0)) {
+            ens.setResolver(node, resolver);
+        }
+=======
 
         _wrap(node, name, wrappedOwner, _fuses);
+ master
     }
 
     /**
@@ -702,6 +733,10 @@ contract NameWrapper is
             "NameWrapper: Wrapper only supports .eth ERC721 token transfers"
         );
 
+ resolver
+        (string memory label, address owner, uint96 fuses, address resolver) =
+            abi.decode(data, (string, address, uint96, address));
+=======
         (
             string memory label,
             address owner,
@@ -710,12 +745,18 @@ contract NameWrapper is
         ) = abi.decode(data, (string, address, uint96, address));
 
         bytes32 labelhash = bytes32(tokenId);
+ master
 
         require(
             keccak256(bytes(label)) == labelhash,
             "NameWrapper: Token id does match keccak(label) of label provided in data field"
         );
 
+ resolver
+        bytes32 labelhash = keccak256(bytes(label));
+
+=======
+ master
         // transfer the ens record back to the new owner (this contract)
         registrar.reclaim(uint256(labelhash), address(this));
 
@@ -792,6 +833,9 @@ contract NameWrapper is
             ens.setResolver(node, resolver);
         }
 
+ resolver
+        emit NameWrapped(node, name, wrappedOwner, _fuses);
+=======
  parent
         _mint(node, wrappedOwner, _fuses);
         _setParent(node, parentNode);
@@ -799,6 +843,7 @@ contract NameWrapper is
 =======
         // mint a new ERC1155 token with fuses
         _wrap(node, name, wrappedOwner, _fuses);
+ master
  master
     }
 

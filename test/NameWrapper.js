@@ -180,6 +180,8 @@ describe('Name Wrapper', () => {
       expect(await NameWrapper.ownerOf(namehash('xyz'))).to.equal(EMPTY_ADDRESS)
 
       await EnsRegistry.setApprovalForAll(NameWrapper.address, true)
+ resolver
+=======
  parent
       await NameWrapper.wrap(ROOT_NODE, 'xyz', account, MINIMUM_PARENT_FUSES)
       expect(await NameWrapper.ownerOf(namehash('xyz'))).to.equal(account)
@@ -203,6 +205,7 @@ describe('Name Wrapper', () => {
       )
     })
 =======
+ master
       await NameWrapper.wrap(encodeName('xyz'), account, fuses, EMPTY_ADDRESS)
       expect(await NameWrapper.ownerOf(namehash('xyz'))).to.equal(account)
     })
@@ -221,6 +224,8 @@ describe('Name Wrapper', () => {
       await EnsRegistry.setApprovalForAll(NameWrapper.address, true)
 
       const tx = NameWrapper.wrap(
+ resolver
+=======
  parent
         ROOT_NODE,
         'xyz',
@@ -231,6 +236,7 @@ describe('Name Wrapper', () => {
         .to.emit(NameWrapper, 'NameWrapped')
         .withArgs(ROOT_NODE, 'xyz', account, MINIMUM_PARENT_FUSES)
 =======
+ master
         encodeName('xyz'),
         account,
         fuses,
@@ -246,16 +252,22 @@ describe('Name Wrapper', () => {
       await EnsRegistry.setApprovalForAll(NameWrapper.address, true)
 
       const tx = NameWrapper.wrap(
+ resolver
+=======
  parent
         ROOT_NODE,
         'xyz',
         account,
         MINIMUM_PARENT_FUSES
 =======
+ master
         encodeName('xyz'),
         account,
         fuses,
         EMPTY_ADDRESS
+ resolver
+=======
+ master
  master
       )
       await expect(tx)
@@ -330,7 +342,11 @@ describe('Name Wrapper', () => {
       await BaseRegistrar.register(labelHash, account, 84600)
       await EnsRegistry.setApprovalForAll(NameWrapper.address, true)
       await expect(
+ resolver
+        NameWrapper.wrap(encodeName('blah.eth'), account2, 0, EMPTY_ADDRESS)
+=======
         NameWrapper.wrap(encodeName('wrapped.eth'), account2, 0, EMPTY_ADDRESS)
+ master
       ).to.be.revertedWith(
         'revert NameWrapper: .eth domains need to use wrapETH2LD()'
       )
@@ -940,8 +956,13 @@ describe('Name Wrapper', () => {
       const tx = await NameWrapper2.wrapETH2LD(
         label,
         account2,
+ resolver
+        CAN_DO_EVERYTHING,
+        EMPTY_ADDRESS
+=======
  parent
         CAN_DO_EVERYTHING
+ master
       )
 
       expect(await NameWrapper2.ownerOf(nameHash)).to.equal(account2)
