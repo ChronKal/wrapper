@@ -23,8 +23,13 @@ interface INameWrapper is IERC1155 {
         Expired
     }
     event NameWrapped(
+ unindex-string
+        bytes32 indexed parentNode,
+        string label,
+
         bytes32 indexed node,
         bytes name,
+ master
         address owner,
         uint96 fuses
     );
