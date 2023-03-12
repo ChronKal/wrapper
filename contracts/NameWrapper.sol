@@ -20,10 +20,18 @@ contract NameWrapper is
     IERC721Receiver
 {
     using BytesUtils for bytes;
+ parent
+    ENS public immutable ens;
+    BaseRegistrar public immutable registrar;
+    IMetadataService public metadataService;
+    bytes4 private constant ERC721_RECEIVED = 0x150b7a02;
+    mapping(bytes32 => bytes32) public parents;
+=======
     ENS public immutable override ens;
     BaseRegistrar public immutable override registrar;
     IMetadataService public override metadataService;
     mapping(bytes32 => bytes) public override names;
+ master
 
     bytes32 private constant ETH_NODE =
         0x93cdeb708b7545dc668eb9280176169d1c33cfd8ed6f04690a0bcc88a93fc4ae;
@@ -131,6 +139,160 @@ contract NameWrapper is
      * @return vulnerability The type of vulnerability
      * @return vulnerableNode Which node is vulnerable
      */
+ parent
+
+    function getFuses(bytes32 node) public view override returns (uint96) {
+        (, uint96 fuses) = getData(uint256(node));
+        return fuses;
+    }
+
+    /**
+     * @notice Check whether a name can be unwrapped
+     *
+     * @param node namehash of the name to check
+     * @return Boolean of whether or not can be wrapped
+     */
+
+    function canUnwrap(bytes32 node) public view override returns (bool) {
+        if (getFuses(node) & CANNOT_UNWRAP == 0) {
+            return true;
+        }
+        bytes32 parent = parents[node];
+        return canReplaceSubdomain(parent);
+    }
+
+    /**
+     * @notice Check whether a name can burn fuses
+     *
+     * @param node namehash of the name to check
+     * @return Boolean of whether or not can burn fuses
+     */
+
+    function canBurnFuses(bytes32 node) public view override returns (bool) {
+        if (getFuses(node) & CANNOT_BURN_FUSES == 0) {
+            return true;
+        }
+        bytes32 parent = parents[node];
+        return canReplaceSubdomain(parent);
+    }
+
+    /**
+     * @notice Check whether a name can be transferred
+     *
+     * @param node namehash of the name to check
+     * @return Boolean of whether or not can be transferred
+     */
+
+    function canTransfer(bytes32 node) public view override returns (bool) {
+        if (getFuses(node) & CANNOT_TRANSFER == 0) {
+            return true;
+        }
+        bytes32 parent = parents[node];
+        return canReplaceSubdomain(parent);
+    }
+
+    /**
+     * @notice Check whether a name can set the resolver
+     *
+     * @param node namehash of the name to check
+     * @return Boolean of whether or not resolver can be set
+     */
+
+    function canSetResolver(bytes32 node) public view override returns (bool) {
+        if (getFuses(node) & CANNOT_SET_RESOLVER == 0) {
+            return true;
+        }
+        bytes32 parent = parents[node];
+        return canReplaceSubdomain(parent);
+    }
+
+    /**
+     * @notice Check whether a name can set the TTL
+     *
+     * @param node namehash of the name to check
+     * @return Boolean of whether or not TTL can be set
+     */
+
+    function canSetTTL(bytes32 node) public view override returns (bool) {
+        if (getFuses(node) & CANNOT_SET_TTL == 0) {
+            return true;
+        }
+        bytes32 parent = parents[node];
+        return canReplaceSubdomain(parent);
+    }
+
+    /**
+     * @notice Check whether a name can create a subdomain
+     * @dev Creating a subdomain is defined as a subdomain that has a 0x0 owner and a new owner is set
+     * @param node namehash of the name to check
+     * @return Boolean of whether or not subdomains can be created
+     */
+
+    function canCreateSubdomain(bytes32 node)
+        public
+        view
+        override
+        returns (bool)
+    {
+        if (getFuses(node) & CANNOT_CREATE_SUBDOMAIN == 0) {
+            return true;
+        }
+        bytes32 parent = parents[node];
+        return canReplaceSubdomain(parent);
+    }
+
+    /**
+     * @notice Check whether a name can replace a subdomain
+     * @dev Replacing a subdomain is defined as a subdomain that has an existing owner and is overwritten
+     * @param node namehash of the name to check
+     * @return Boolean of whether or not TTL can be set
+     */
+
+    function canReplaceSubdomain(bytes32 node)
+        public
+        view
+        override
+        returns (bool)
+    {
+        if (getFuses(node) & CANNOT_REPLACE_SUBDOMAIN == 0) {
+            return true;
+        }
+        bytes32 parent = parents[node];
+        // need the label ID for this
+        // Need to check the eth node, but we don't have the label
+        // if (parent == ETH_NODE) {
+        //     return registrar.available(uint256(node));
+        // }
+        if (parent == ROOT_NODE) {
+            return false;
+        }
+        return canReplaceSubdomain(parent);
+    }
+
+    /**
+     * @notice Check whether a name can call setSubnodeOwner/setSubnodeRecord
+     * @dev Checks both canCreateSubdomain and canReplaceSubdomain and whether not they have been burnt
+     *      and checks whether the owner of the subdomain is 0x0 for creating or already exists for
+     *      replacing a subdomain. If either conditions are true, then it is possible to call
+     *      setSubnodeOwner
+     * @param node namehash of the name to check
+     * @param label labelhash of the name to check
+     * @return Boolean of whether or not setSubnodeOwner/setSubnodeRecord can be called
+     */
+
+    function canCallSetSubnodeOwner(bytes32 node, bytes32 label)
+        public
+        view
+        returns (bool)
+    {
+        bytes32 subnode = _makeNode(node, label);
+        address owner = ens.owner(subnode);
+
+        //TODO: Could be made more efficient if making recursive calls?
+        return
+            (owner == address(0) && canCreateSubdomain(node)) ||
+            (owner != address(0) && canReplaceSubdomain(node));
+=======
     function getFuses(bytes32 node)
         public
         view
@@ -145,6 +307,7 @@ contract NameWrapper is
         require(name.length > 0, "NameWrapper: Name not found");
         (, vulnerability, vulnerableNode) = _checkHierarchy(name, 0);
         (, fuses) = getData(uint256(node));
+ master
     }
 
     /**
@@ -177,8 +340,14 @@ contract NameWrapper is
         // transfer the ens record back to the new owner (this contract)
         registrar.reclaim(tokenId, address(this));
 
+ parent
+        _checkFuses(ETH_NODE, _fuses);
+        _setParent(node, ETH_NODE);
+        _mint(node, wrappedOwner, _fuses);
+=======
         _wrapETH2LD(label, wrappedOwner, _fuses, resolver);
     }
+ master
 
     /**
      * @dev Registers a new .eth second-level domain and wraps it.
@@ -557,6 +726,12 @@ contract NameWrapper is
 
     /***** Internal functions */
 
+    function _setParent(bytes32 node, bytes32 parent) internal {
+        if (parents[node] == 0x0) {
+            parents[node] = parent;
+        }
+    }
+
     function _canTransfer(uint96 fuses) internal pure override returns (bool) {
         return fuses & CANNOT_TRANSFER == 0;
     }
@@ -617,8 +792,14 @@ contract NameWrapper is
             ens.setResolver(node, resolver);
         }
 
+ parent
+        _mint(node, wrappedOwner, _fuses);
+        _setParent(node, parentNode);
+        emit NameWrapped(parentNode, label, wrappedOwner, _fuses);
+=======
         // mint a new ERC1155 token with fuses
         _wrap(node, name, wrappedOwner, _fuses);
+ master
     }
 
     function _unwrap(bytes32 node, address newOwner) private {
