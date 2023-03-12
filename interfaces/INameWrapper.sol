@@ -1,5 +1,7 @@
 pragma solidity ^0.8.4;
 
+import "@ensdomains/ens-contracts/contracts/registry/ENS.sol";
+import "@ensdomains/ens-contracts/contracts/ethregistrar/BaseRegistrar.sol";
 import "@openzeppelin/contracts/token/ERC1155/IERC1155.sol";
 import "./IMetadataService.sol";
 
@@ -21,8 +23,13 @@ interface INameWrapper is IERC1155 {
         Expired
     }
     event NameWrapped(
+ unindex-string
+        bytes32 indexed parentNode,
+        string label,
+
         bytes32 indexed node,
         bytes name,
+ master
         address owner,
         uint96 fuses
     );
@@ -30,6 +37,11 @@ interface INameWrapper is IERC1155 {
     event NameUnwrapped(bytes32 indexed node, address owner);
 
     event FusesBurned(bytes32 indexed node, uint96 fuses);
+
+    function ens() external view returns(ENS);
+    function registrar() external view returns(BaseRegistrar);
+    function metadataService() external view returns(IMetadataService);
+    function names(bytes32) external view returns(bytes memory);
 
     function wrap(
         bytes calldata name,

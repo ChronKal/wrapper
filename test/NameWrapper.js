@@ -8,6 +8,7 @@ const n = require('eth-ens-namehash')
 const namehash = n.hash
 const { shouldBehaveLikeERC1155 } = require('./ERC1155.behaviour')
 const { shouldSupportInterfaces } = require('./SupportsInterface.behaviour')
+const { ZERO_ADDRESS } = require('@openzeppelin/test-helpers/src/constants')
 
 const abiCoder = new ethers.utils.AbiCoder()
 
@@ -179,6 +180,32 @@ describe('Name Wrapper', () => {
       expect(await NameWrapper.ownerOf(namehash('xyz'))).to.equal(EMPTY_ADDRESS)
 
       await EnsRegistry.setApprovalForAll(NameWrapper.address, true)
+ resolver
+=======
+ parent
+      await NameWrapper.wrap(ROOT_NODE, 'xyz', account, MINIMUM_PARENT_FUSES)
+      expect(await NameWrapper.ownerOf(namehash('xyz'))).to.equal(account)
+    })
+
+    it('Sets the correct parent when wrapping', async () => {
+      await EnsRegistry.setApprovalForAll(NameWrapper.address, true)
+      await NameWrapper.wrap(ROOT_NODE, 'xyz', account, MINIMUM_PARENT_FUSES)
+      expect(await NameWrapper.parents(namehash('xyz'))).to.equal(ROOT_NODE)
+
+      await NameWrapper.setSubnodeOwner(
+        namehash('xyz'),
+        labelhash('sub'),
+        account
+      )
+
+      await NameWrapper.wrap(namehash('xyz'), 'sub', account, 0)
+
+      expect(await NameWrapper.parents(namehash('sub.xyz'))).to.equal(
+        namehash('xyz')
+      )
+    })
+=======
+ master
       await NameWrapper.wrap(encodeName('xyz'), account, fuses, EMPTY_ADDRESS)
       expect(await NameWrapper.ownerOf(namehash('xyz'))).to.equal(account)
     })
@@ -191,10 +218,25 @@ describe('Name Wrapper', () => {
 
     it('emits event for Wrap', async () => {
       const fuses = MINIMUM_PARENT_FUSES
+ master
 
+    it('emits event for Wrap', async () => {
       await EnsRegistry.setApprovalForAll(NameWrapper.address, true)
 
       const tx = NameWrapper.wrap(
+ resolver
+=======
+ parent
+        ROOT_NODE,
+        'xyz',
+        account,
+        MINIMUM_PARENT_FUSES
+      )
+      await expect(tx)
+        .to.emit(NameWrapper, 'NameWrapped')
+        .withArgs(ROOT_NODE, 'xyz', account, MINIMUM_PARENT_FUSES)
+=======
+ master
         encodeName('xyz'),
         account,
         fuses,
@@ -203,18 +245,30 @@ describe('Name Wrapper', () => {
       await expect(tx)
         .to.emit(NameWrapper, 'NameWrapped')
         .withArgs(namehash('xyz'), encodeName('xyz'), account, fuses)
+ master
     })
 
     it('emits event for TransferSingle', async () => {
-      const fuses = MINIMUM_PARENT_FUSES
-
       await EnsRegistry.setApprovalForAll(NameWrapper.address, true)
 
       const tx = NameWrapper.wrap(
+ resolver
+=======
+ parent
+        ROOT_NODE,
+        'xyz',
+        account,
+        MINIMUM_PARENT_FUSES
+=======
+ master
         encodeName('xyz'),
         account,
         fuses,
         EMPTY_ADDRESS
+ resolver
+=======
+ master
+ master
       )
       await expect(tx)
         .to.emit(NameWrapper, 'TransferSingle')
@@ -228,12 +282,14 @@ describe('Name Wrapper', () => {
     })
 
     it('Will not allow wrapping with a target address of 0x0 or the wrapper contract address.', async () => {
+      await EnsRegistry.setApprovalForAll(NameWrapper.address, true)
       await expect(
         NameWrapper.wrap(encodeName('xyz'), EMPTY_ADDRESS, 0, EMPTY_ADDRESS)
       ).to.be.revertedWith('revert ERC1155: mint to the zero address')
     })
 
     it('Will not allow wrapping with a target address of the wrapper contract address.', async () => {
+      await EnsRegistry.setApprovalForAll(NameWrapper.address, true)
       await expect(
         NameWrapper.wrap(
           encodeName('xyz'),
@@ -284,12 +340,32 @@ describe('Name Wrapper', () => {
       const label = 'wrapped'
       const labelHash = labelhash(label)
       await BaseRegistrar.register(labelHash, account, 84600)
-      await BaseRegistrar.setApprovalForAll(NameWrapper.address, true)
+      await EnsRegistry.setApprovalForAll(NameWrapper.address, true)
       await expect(
+ resolver
         NameWrapper.wrap(encodeName('blah.eth'), account2, 0, EMPTY_ADDRESS)
+=======
+        NameWrapper.wrap(encodeName('wrapped.eth'), account2, 0, EMPTY_ADDRESS)
+ master
       ).to.be.revertedWith(
         'revert NameWrapper: .eth domains need to use wrapETH2LD()'
       )
+    })
+
+    it('Allows wrapping of .eth subdomains', async () => {
+      const label = 'wrapped'
+      const labelHash = labelhash(label)
+      const nameHash = namehash(`sub.${label}.eth`)
+      await BaseRegistrar.register(labelHash, account, 84600)
+      await EnsRegistry.setSubnodeOwner(
+        namehash(`${label}.eth`),
+        labelhash('sub'),
+        account
+      )
+      await EnsRegistry.setApprovalForAll(NameWrapper.address, true)
+      await NameWrapper.wrap(encodeName(`sub.${label}.eth`), account, 0)
+      expect(await NameWrapper.ownerOf(nameHash)).to.equal(account)
+      expect(await EnsRegistry.owner(nameHash)).to.equal(NameWrapper.address)
     })
 
     it('Fuses are disabled if CANNOT_REPLACE_SUBDOMAIN has not been burned on the parent domain', async () => {
@@ -458,6 +534,38 @@ describe('Name Wrapper', () => {
 
       expect(await NameWrapper2.ownerOf(nameHash)).to.equal(account2)
       expect(await EnsRegistry.owner(nameHash)).to.equal(NameWrapper.address)
+    })
+
+    it('Will not wrap a name with junk at the end', async () => {
+      await EnsRegistry.setApprovalForAll(NameWrapper.address, true)
+      await expect(
+        NameWrapper.wrap(
+          encodeName('xyz') + '123456',
+          account,
+          CAN_DO_EVERYTHING,
+          ZERO_ADDRESS
+        )
+      ).to.be.revertedWith('namehash: Junk at end of name')
+    })
+
+    it('Does not allow wrapping a name you do not own', async () => {
+      // Register the name to account1
+      await EnsRegistry.setApprovalForAll(NameWrapper.address, true)
+      await NameWrapper.wrap(
+        encodeName('xyz'),
+        account,
+        CAN_DO_EVERYTHING,
+        EMPTY_ADDRESS
+      )
+
+      // Deploy the destroy-your-name contract
+      const NameGriefer = await deploy('NameGriefer', [NameWrapper.address])
+
+      // Try and burn the name
+      expect(NameGriefer.destroy(encodeName('xyz'))).to.be.reverted
+
+      // Make sure it didn't succeed
+      expect(await NameWrapper.ownerOf(namehash('xyz'))).to.equal(account)
     })
   })
 
@@ -776,6 +884,32 @@ describe('Name Wrapper', () => {
       )
     })
 
+ parent
+    it('Rewrapping expired names with no fuses causes subdomains fuses to be cleared ', async () => {
+      const DAY = 60 * 60 * 24
+      const GRACE_PERIOD = 90
+      await BaseRegistrar.register(labelHash, account, DAY)
+      await BaseRegistrar.setApprovalForAll(NameWrapper.address, true)
+      await NameWrapper.wrapETH2LD(label, account, MINIMUM_PARENT_FUSES)
+      await EnsRegistry.setApprovalForAll(NameWrapper.address, true)
+      await NameWrapper.setSubnodeOwnerAndWrap(
+        nameHash,
+        'sub',
+        account,
+        MINIMUM_PARENT_FUSES
+      )
+      //expect fuses to be burned on subdoamin
+      const subTokenId = namehash(`sub.${label}.eth`)
+      expect(await NameWrapper.canUnwrap(subTokenId)).to.equal(false)
+      expect(await NameWrapper.canReplaceSubdomain(subTokenId)).to.equal(false)
+      await increaseTime(DAY * GRACE_PERIOD + DAY + 1)
+      await mine()
+
+      expect(await BaseRegistrar.available(labelHash)).to.equal(true)
+
+      await BaseRegistrar2.register(labelHash, account2, DAY)
+      expect(await BaseRegistrar.ownerOf(labelHash)).to.equal(account2)
+=======
     it('correctly reports fuses for a name that has expired and been rewrapped more permissively', async () => {
       await BaseRegistrar.setApprovalForAll(NameWrapper.address, true)
 
@@ -817,10 +951,29 @@ describe('Name Wrapper', () => {
 
       // Register from another address
       await BaseRegistrar2.register(labelHash, account2, DAY)
+ master
       await BaseRegistrar2.setApprovalForAll(NameWrapper.address, true)
       const tx = await NameWrapper2.wrapETH2LD(
         label,
         account2,
+ resolver
+        CAN_DO_EVERYTHING,
+        EMPTY_ADDRESS
+=======
+ parent
+        CAN_DO_EVERYTHING
+ master
+      )
+
+      expect(await NameWrapper2.ownerOf(nameHash)).to.equal(account2)
+      expect(await BaseRegistrar.ownerOf(labelHash)).to.equal(
+        NameWrapper.address
+      )
+
+      //expect fuses to be unburned on subdoamin
+      expect(await NameWrapper.canUnwrap(subTokenId)).to.equal(true)
+      expect(await NameWrapper.canReplaceSubdomain(subTokenId)).to.equal(true)
+=======
         CAN_DO_EVERYTHING,
         EMPTY_ADDRESS
       )
@@ -836,6 +989,7 @@ describe('Name Wrapper', () => {
       expect(fuses).to.equal(CANNOT_UNWRAP)
       expect(vulnerability).to.equal(ParentVulnerability.Fuses)
       expect(nodeVulnerable).to.equal(namehash('wrapped2.eth'))
+ master
     })
 
     it('emits Wrap event', async () => {
@@ -881,6 +1035,13 @@ describe('Name Wrapper', () => {
         EMPTY_ADDRESS
       )
       expect(await NameWrapper.ownerOf(nameHash)).to.equal(account2)
+    })
+
+    it('Sets the correct parent when wrapping', async () => {
+      await BaseRegistrar.setApprovalForAll(NameWrapper.address, true)
+      await BaseRegistrar.register(labelHash, account, 84600)
+      await NameWrapper.wrapETH2LD(label, account2, CAN_DO_EVERYTHING)
+      expect(await NameWrapper.parents(nameHash)).to.equal(namehash('eth'))
     })
 
     it('Does not allow wrapping with a target address of 0x0', async () => {
@@ -977,6 +1138,14 @@ describe('Name Wrapper', () => {
       const [fuses, vulnerability] = await NameWrapper.getFuses(nameHash)
       expect(fuses).to.equal(initialFuses)
       expect(vulnerability).to.equal(ParentVulnerability.Safe)
+    })
+
+    it('Will not wrap an empty name', async () => {
+      await BaseRegistrar.register(labelhash(''), account, 84600)
+      await BaseRegistrar.setApprovalForAll(NameWrapper.address, true)
+      await expect(
+        NameWrapper.wrapETH2LD('', account, CAN_DO_EVERYTHING, ZERO_ADDRESS)
+      ).to.be.revertedWith('NameWrapper: Label too short')
     })
   })
 
@@ -1634,7 +1803,20 @@ describe('Name Wrapper', () => {
           1
         )
     })
+
+    it('Will not create a subdomain with an empty label', async () => {
+      await EnsRegistry.setApprovalForAll(NameWrapper.address, true)
+      await expect(
+        NameWrapper.setSubnodeOwnerAndWrap(
+          wrappedTokenId,
+          '',
+          account,
+          CAN_DO_EVERYTHING
+        )
+      ).to.be.revertedWith('NameWrapper: Label too short')
+    })
   })
+
   describe('setSubnodeRecordAndWrap()', async () => {
     const label = 'subdomain2'
     const tokenId = labelhash(label)
@@ -1834,7 +2016,7 @@ describe('Name Wrapper', () => {
         )
     })
 
-    it('Sets the appropriate values on the ENS registry.', async () => {
+    it('Sets the appropriate values on the ENS registry', async () => {
       await NameWrapper.setSubnodeRecordAndWrap(
         wrappedTokenId,
         'sub',
@@ -1849,6 +2031,20 @@ describe('Name Wrapper', () => {
       expect(await EnsRegistry.owner(node)).to.equal(NameWrapper.address)
       expect(await EnsRegistry.resolver(node)).to.equal(resolver)
       expect(await EnsRegistry.ttl(node)).to.equal(100)
+    })
+
+    it('Will not create a subdomain with an empty label', async () => {
+      expect(await NameWrapper.ownerOf(wrappedTokenId)).to.equal(account)
+      await expect(
+        NameWrapper.setSubnodeRecordAndWrap(
+          wrappedTokenId,
+          '',
+          account,
+          resolver,
+          0,
+          0
+        )
+      ).to.be.revertedWith('NameWrapper: Label too short')
     })
   })
 
@@ -2410,6 +2606,22 @@ describe('Name Wrapper', () => {
           1
         )
     })
+
+    it('will not wrap a name with an empty label', async () => {
+      await BaseRegistrar.register(labelhash(''), account, 84600)
+
+      await expect(
+        BaseRegistrar['safeTransferFrom(address,address,uint256,bytes)'](
+          account,
+          NameWrapper.address,
+          labelhash(''),
+          abiCoder.encode(
+            ['string', 'address', 'uint96'],
+            ['', account2, '0x0']
+          )
+        )
+      ).to.be.revertedWith('NameWrapper: Label too short')
+    })
   })
 
   describe('Transfer', () => {
@@ -2743,6 +2955,18 @@ describe('Name Wrapper', () => {
       )
       expect(fuses).to.equal(initialFuses)
       expect(vulnerability).to.equal(ParentVulnerability.Safe)
+    })
+
+    it('Will not wrap a name with an empty label', async () => {
+      await expect(
+        NameWrapper.registerAndWrapETH2LD(
+          '',
+          account,
+          86400,
+          EMPTY_ADDRESS,
+          CAN_DO_EVERYTHING
+        )
+      ).to.be.revertedWith('NameWrapper: Label too short')
     })
   })
 
