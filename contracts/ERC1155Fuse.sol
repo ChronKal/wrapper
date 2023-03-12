@@ -1,3 +1,4 @@
+//SPDX-License-Identifier: MIT
 pragma solidity ^0.8.4;
 
 import "@openzeppelin/contracts/utils/introspection/ERC165.sol";
@@ -143,7 +144,7 @@ abstract contract ERC1155Fuse is ERC165, IERC1155, IERC1155MetadataURI {
         uint256 tokenId,
         address owner,
         uint96 fuses
-    ) internal {
+    ) internal virtual {
         _tokens[tokenId] = uint256(uint160(owner)) | (uint256(fuses) << 160);
     }
 
@@ -249,6 +250,14 @@ abstract contract ERC1155Fuse is ERC165, IERC1155, IERC1155MetadataURI {
         );
         _setData(tokenId, newOwner, _fuses);
         emit TransferSingle(msg.sender, address(0x0), newOwner, tokenId, 1);
+        _doSafeTransferAcceptanceCheck(
+            msg.sender,
+            address(0),
+            newOwner,
+            tokenId,
+            1,
+            ""
+        );
     }
 
     function _burn(uint256 tokenId) internal virtual {
